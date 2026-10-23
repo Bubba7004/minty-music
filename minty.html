@@ -395,11 +395,12 @@ async function fetchImg(url){
   for(const r of routes){
     try{
       const res = await fetch(r, {referrerPolicy:"no-referrer"});
-      if(!res.ok) continue;
+      if(!res.ok){ console.log("[minty art]", res.status, r.slice(0,110)); continue; }
       const buf = new Uint8Array(await res.arrayBuffer());
       const type = sniffType(buf, res.headers.get("content-type"));
+      console.log("[minty art]", type ? "OK "+type : "NOT AN IMAGE ("+(res.headers.get("content-type")||"no type")+", "+buf.length+"B, starts: "+Array.from(buf.slice(0,12)).map(x=>x.toString(16).padStart(2,"0")).join(" ")+")", r.slice(0,110));
       if(type) return URL.createObjectURL(new Blob([buf], {type}));
-    }catch(e){}
+    }catch(e){ console.log("[minty art] blocked/failed:", e.message, r.slice(0,110)); }
   }
   return null;
 }
