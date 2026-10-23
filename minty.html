@@ -373,7 +373,7 @@ function artCandidates(u){
     if(m){
       let b = decodeURIComponent(m[1]).replace(/-/g,"+").replace(/_/g,"/");
       while(b.length % 4) b += "=";
-      (atob(b).match(/https?:\/\/[^\s"'\[\],\\]+/g) || []).forEach(x=>c.push(x));
+      (atob(b).match(/https?:\/\/[^\s"'\[\],\\|]+/g) || []).forEach(x=>c.push(x));
     }
   }catch(e){}
   return [...new Set(c)];
