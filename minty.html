@@ -378,18 +378,40 @@ function artCandidates(u){
   }catch(e){}
   return [...new Set(c)];
 }
-function tryLoad(list, i, cb){
-  if(i >= list.length) return cb(null);
-  const im = new Image(); im.referrerPolicy = "no-referrer";
-  im.onload = ()=>cb(list[i]);
-  im.onerror = ()=>tryLoad(list, i+1, cb);
-  im.src = list[i];
+function sniffType(u8, ct){
+  const h = (...b)=>b.every((v,i)=>u8[i]===v);
+  if(h(0xFF,0xD8,0xFF)) return "image/jpeg";
+  if(h(0x89,0x50,0x4E,0x47)) return "image/png";
+  if(h(0x47,0x49,0x46,0x38)) return "image/gif";
+  if(h(0x52,0x49,0x46,0x46) && u8[8]===0x57 && u8[9]===0x45) return "image/webp";
+  if(h(0x00,0x00,0x00) && String.fromCharCode(...u8.slice(4,12)).includes("ftypavif")) return "image/avif";
+  if(/^image\//.test(ct||"")) return ct.split(";")[0];
+  return null;
+}
+/* Fetch raw bytes and sniff the type ourselves, so a wrong Content-Type (which makes the browser's
+   Opaque Response Blocking reject an <img>) doesn't matter. Direct first, then a CORS proxy. */
+async function fetchImg(url){
+  const routes = [url, "https://api.allorigins.win/raw?url=" + encodeURIComponent(url)];
+  for(const r of routes){
+    try{
+      const res = await fetch(r, {referrerPolicy:"no-referrer"});
+      if(!res.ok) continue;
+      const buf = new Uint8Array(await res.arrayBuffer());
+      const type = sniffType(buf, res.headers.get("content-type"));
+      if(type) return URL.createObjectURL(new Blob([buf], {type}));
+    }catch(e){}
+  }
+  return null;
+}
+async function resolveArt(u){
+  for(const c of artCandidates(u)){ const o = await fetchImg(c); if(o) return o; }
+  return null;
 }
 function setArt(el, u){
   if(!u){ el.style.backgroundImage = ""; return; }
   const apply = src => { el.style.backgroundImage = src ? 'url("'+src+'")' : ""; };
-  if(artCache.has(u)){ apply(artCache.get(u)); return; }
-  tryLoad(artCandidates(u), 0, src=>{ artCache.set(u, src); apply(src); });
+  if(!artCache.has(u)) artCache.set(u, resolveArt(u));
+  artCache.get(u).then(apply);
 }
 new MutationObserver(()=>{
   document.querySelectorAll("[data-art]:not([data-artdone])").forEach(el=>{ el.dataset.artdone = 1; setArt(el, el.dataset.art); });
