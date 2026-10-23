@@ -405,18 +405,47 @@ async function fetchImg(url){
   }
   return null;
 }
-async function resolveArt(u){
-  for(const c of artCandidates(u)){ const o = await fetchImg(c); if(o) return o; }
+/* Ask the Audius API for the track's artwork URLs (nodes it lists are known-good for that track). */
+async function audiusArtwork(id){
+  if(!/^au:/.test(String(id||""))) return [];
+  try{
+    const host = await getAudiusHost();
+    const r = await fetch(host + "/v1/tracks/" + encodeURIComponent(String(id).slice(3)) + "?app_name=" + APP_NAME);
+    const j = await r.json();
+    const a = j && j.data && j.data.artwork;
+    console.log("[minty art] audius api artwork", id, a ? Object.keys(a).join(",") : "none");
+    return a ? [a["480x480"], a["1000x1000"], a["150x150"]].filter(Boolean) : [];
+  }catch(e){ console.log("[minty art] audius api failed:", e.message); return []; }
+}
+function sizeVariants(list){
+  const out = [];
+  list.forEach(u=>{
+    if(/\/\d+x\d+\.jpg$/.test(u) && !/\/api\//.test(u)){
+      ["1000x1000","150x150"].forEach(sz=>out.push(u.replace(/\/\d+x\d+\.jpg$/, "/"+sz+".jpg")));
+    }
+  });
+  return out;
+}
+async function resolveArt(u, id){
+  const fromApi = await audiusArtwork(id);
+  const mirrors = artCandidates(u);
+  const proxy = mirrors.pop();                       // proxy URL is always last
+  const order = [...new Set([...fromApi, ...mirrors, ...sizeVariants(mirrors.slice(0,3)), proxy])];
+  for(const c of order){ const o = await fetchImg(c); if(o) return o; }
   return null;
 }
-function setArt(el, u){
+function setArt(el, u, id){
   if(!u){ el.style.backgroundImage = ""; return; }
   const apply = src => { el.style.backgroundImage = src ? 'url("'+src+'")' : ""; };
-  if(!artCache.has(u)) artCache.set(u, resolveArt(u));
+  if(!artCache.has(u)) artCache.set(u, resolveArt(u, id));
   artCache.get(u).then(apply);
 }
 new MutationObserver(()=>{
-  document.querySelectorAll("[data-art]:not([data-artdone])").forEach(el=>{ el.dataset.artdone = 1; setArt(el, el.dataset.art); });
+  document.querySelectorAll("[data-art]:not([data-artdone])").forEach(el=>{ el.dataset.artdone = 1;
+    const id = el.closest("[data-tid]")?.dataset.tid
+      || (el.id==="pThumb" ? currentTrack()?.id : null)
+      || (el.classList.contains("mt") ? modalTrack?.id : null);
+    setArt(el, el.dataset.art, id); });
 }).observe(document.body, {childList:true, subtree:true});
 
 /* ============================== audio engine ============================== */
@@ -504,7 +533,7 @@ function setMediaSession(t){
 /* ============================== player bar ui ============================== */
 function showPlayerBar(t){
   $("#player").classList.add("show");
-  setArt($("#pThumb"), art(t));
+  setArt($("#pThumb"), art(t), t.id);
   $("#pTitle").textContent = t.title; $("#pArtist").textContent = t.artist;
   setMediaSession(t);
 }
