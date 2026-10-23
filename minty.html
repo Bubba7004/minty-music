@@ -367,7 +367,7 @@ async function streamURL(track){
    Candidates: the proxy URL, then the original image URLs packed inside its base64 "u" param. */
 const artCache = new Map();
 function artCandidates(u){
-  const c = [u];
+  const c = [];
   try{
     const m = u.match(/[?&]u=([^&]+)/);
     if(m){
@@ -376,6 +376,7 @@ function artCandidates(u){
       (atob(b).replace(/%7C/gi,"|").match(/https?:\/\/[^\s"'\[\],\\|]+/g) || []).forEach(x=>c.push(x));
     }
   }catch(e){}
+  c.push(u);               /* proxy URL last: it can redirect to a malformed pipe-joined address (400) */
   return [...new Set(c)];
 }
 function sniffType(u8, ct){
