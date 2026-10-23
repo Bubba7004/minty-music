@@ -362,6 +362,39 @@ async function streamURL(track){
   return host + "/v1/tracks/" + encodeURIComponent(String(track.id).replace(/^au:/,"")) + "/stream?app_name=" + APP_NAME;
 }
 
+/* ============================== cover art loader ============================== */
+/* Probes each candidate with <img> (no referrer) and uses the first that actually decodes.
+   Candidates: the proxy URL, then the original image URLs packed inside its base64 "u" param. */
+const artCache = new Map();
+function artCandidates(u){
+  const c = [u];
+  try{
+    const m = u.match(/[?&]u=([^&]+)/);
+    if(m){
+      let b = decodeURIComponent(m[1]).replace(/-/g,"+").replace(/_/g,"/");
+      while(b.length % 4) b += "=";
+      (atob(b).match(/https?:\/\/[^\s"'\[\],\\]+/g) || []).forEach(x=>c.push(x));
+    }
+  }catch(e){}
+  return [...new Set(c)];
+}
+function tryLoad(list, i, cb){
+  if(i >= list.length) return cb(null);
+  const im = new Image(); im.referrerPolicy = "no-referrer";
+  im.onload = ()=>cb(list[i]);
+  im.onerror = ()=>tryLoad(list, i+1, cb);
+  im.src = list[i];
+}
+function setArt(el, u){
+  if(!u){ el.style.backgroundImage = ""; return; }
+  const apply = src => { el.style.backgroundImage = src ? 'url("'+src+'")' : ""; };
+  if(artCache.has(u)){ apply(artCache.get(u)); return; }
+  tryLoad(artCandidates(u), 0, src=>{ artCache.set(u, src); apply(src); });
+}
+new MutationObserver(()=>{
+  document.querySelectorAll("[data-art]:not([data-artdone])").forEach(el=>{ el.dataset.artdone = 1; setArt(el, el.dataset.art); });
+}).observe(document.body, {childList:true, subtree:true});
+
 /* ============================== audio engine ============================== */
 const audio = $("#audio");
 audio.volume = store.get("vol", .8) / 100;
@@ -447,7 +480,7 @@ function setMediaSession(t){
 /* ============================== player bar ui ============================== */
 function showPlayerBar(t){
   $("#player").classList.add("show");
-  $("#pThumb").style.backgroundImage = "url('"+art(t)+"')";
+  setArt($("#pThumb"), art(t));
   $("#pTitle").textContent = t.title; $("#pArtist").textContent = t.artist;
   setMediaSession(t);
 }
@@ -528,7 +561,7 @@ function removeFromPlaylist(plId, tid){
 let modalTrack = null;
 function openModal(track){
   modalTrack = track;
-  $("#mTrack").innerHTML = '<div class="mt" style="background-image:url(\''+art(track)+'\')"></div>'+
+  $("#mTrack").innerHTML = '<div class="mt" data-art="'+esc(art(track))+'"></div>'+
     '<div style="min-width:0"><div class="t">'+esc(track.title)+'</div><div class="a">'+esc(track.artist)+'</div></div>';
   renderModalList();
   $("#overlay").classList.add("show");
@@ -593,7 +626,7 @@ $("#newPlName").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#newPlBt
 function cardHTML(t){
   const fav = favs.has(t.id), pl = isPlayable(t);
   return '<div class="card" data-tid="'+esc(t.id)+'">'+
-    '<div class="thumb" style="background-image:url(\''+art(t)+'\')">'+
+    '<div class="thumb" data-art="'+esc(art(t))+'">'+
       (pl?'':'<span class="badge">no preview</span>')+
       '<button class="play'+(pl?"":" noplay")+'" data-play="'+esc(t.id)+'" title="'+(pl?"Play":"Preview unavailable")+'"><span>'+(pl?"▶":"✕")+'</span></button></div>'+
     '<div class="cinfo"><div class="t" title="'+esc(t.title)+'">'+esc(t.title)+'</div><div class="a" title="'+esc(t.artist)+'">'+esc(t.artist)+'</div></div>'+
@@ -605,8 +638,8 @@ function cardHTML(t){
 function rowHTML(t, plId){
   return '<div class="row" data-tid="'+esc(t.id)+'">'+
     (isPlayable(t)
-      ? '<div class="rthumb" data-play="'+esc(t.id)+'" style="background-image:url(\''+art(t)+'\')"></div>'
-      : '<div class="rthumb" style="background-image:url(\''+art(t)+'\')" title="No preview"></div>')+
+      ? '<div class="rthumb" data-play="'+esc(t.id)+'" data-art="'+esc(art(t))+'"></div>'
+      : '<div class="rthumb" data-art="'+esc(art(t))+'" title="No preview"></div>')+
     '<div class="rinfo"><div class="t" title="'+esc(t.title)+'">'+esc(t.title)+'</div><div class="a">'+esc(t.artist)+' · '+fmt(t.duration)+'</div></div>'+
     '<button class="ibtn'+(favs.has(t.id)?" faved":"")+'" data-favbtn data-favid="'+esc(t.id)+'" title="Favorite"><svg width="16" height="16" viewBox="0 0 24 24" fill="'+(favs.has(t.id)?"currentColor":"none")+'" stroke="currentColor" stroke-width="2.2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21.2l7.8-7.8 1-1a5.5 5.5 0 0 0 0-7.8z"/></svg></button>'+
     (plId!=null
