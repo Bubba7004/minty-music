@@ -5,7 +5,7 @@
       <iframe style="position:fixed; top:0; left:0; bottom:0; right:0; width:100%; height:100%; border:none; margin:0; padding:0; overflow:hidden; z-index:999999;" id="test"></iframe>
       <script>const params = new URLSearchParams(window.location.search);
         params.set("t", Date.now());
-        const safeUrl = "https://cdn.jsdelivr.net/gh/Bubba7004/minty-music@main/minty.html" + "?" + params.toString();
+        const safeUrl = "https://cdn.jsdelivr.net/gh/Bubba7004/minty-music@e4165e6e51134c7e12dde4f7d41307cb6f4ac226/minty.html" + "?" + params.toString();
         let l = `
         \x3Cscript>
         launch();
